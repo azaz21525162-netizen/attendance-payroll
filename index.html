@@ -538,7 +538,7 @@ body.locked .app-header,body.locked .nav,body.locked main,body.locked .section{d
 <h1>出勤與薪資管理</h1>
 <div class="muted">老闆、會計共用資料，請先登入</div>
 <label for="loginUser">帳號</label>
-<select id="loginUser" name="username" autocomplete="username"><option value="boss">老闆</option><option value="accountant">會計</option></select>
+<input id="loginUser" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
 <label for="loginPass">密碼</label>
 <input id="loginPass" name="password" type="password" autocomplete="current-password" required>
 <button type="submit" id="loginBtn">登入</button>
@@ -814,13 +814,14 @@ body.locked .app-header,body.locked .nav,body.locked main,body.locked .section{d
 
 <div class="panel cloud-only" id="pwPanel">
 <h2>帳號與密碼</h2>
-<p class="muted">目前登入：<strong id="pwUserName"></strong>。改密碼後，這個帳號在其他手機上需要重新登入。</p>
+<p class="muted">目前登入：<strong id="pwUserName"></strong>。可直接修改自己的帳號名稱和密碼；改密碼後，這個帳號在其他手機上需要重新登入。</p>
 <form id="pwForm" class="pw-form">
 <input type="text" name="username" id="pwUsername" autocomplete="username" hidden>
-<label>目前密碼<input type="password" id="pwOld" autocomplete="current-password" required></label>
-<label>新密碼（至少 8 個字元）<input type="password" id="pwNew" autocomplete="new-password" minlength="8" required></label>
-<label>再輸入一次新密碼<input type="password" id="pwNew2" autocomplete="new-password" minlength="8" required></label>
-<div class="row"><button type="submit">變更密碼</button></div>
+<label>帳號名稱（登入用）<input type="text" id="pwNewUser" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="30" required></label>
+<label>新密碼（不改請留空，至少 8 個字元）<input type="password" id="pwNew" autocomplete="new-password" minlength="8"></label>
+<label>再輸入一次新密碼<input type="password" id="pwNew2" autocomplete="new-password" minlength="8"></label>
+<label>目前密碼（必填，確認是本人）<input type="password" id="pwOld" autocomplete="current-password" required></label>
+<div class="row"><button type="submit">儲存帳號與密碼</button></div>
 <p class="muted" id="pwMsg" role="status"></p>
 </form>
 </div>
@@ -1717,7 +1718,7 @@ function csvCell(x){
       S.base = exp;
       persist();
       if (changed) {
-        var r = fromRecords(exp);
+        var r = fromRecords(clone(exp));
         state = r.state; history = r.history;
         try { localStorage.setItem(KEY, JSON.stringify(state)); localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) {}
         rerender();
@@ -1768,14 +1769,19 @@ function csvCell(x){
     function showApp() {
       document.body.classList.remove('locked');
       $('loginScreen').hidden = true;
-      $('userBadge').textContent = S.user ? S.user.name : '';
-      $('pwUserName').textContent = S.user ? S.user.name : '';
-      $('pwUsername').value = S.user ? S.user.id : '';
+      showUser();
       if (!S.poll) {
         S.poll = setInterval(function () { if (document.visibilityState !== 'hidden') pull(); }, 20000);
         document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') pull(); });
         window.addEventListener('online', function () { flush(); pull(); });
       }
+    }
+    function showUser() {
+      var u = S.user || {};
+      $('userBadge').textContent = u.name ? u.name + (u.username && u.username !== u.name ? '（' + u.username + '）' : '') : '';
+      $('pwUserName').textContent = (u.name || '') + (u.username ? '，帳號：' + u.username : '');
+      $('pwUsername').value = u.username || '';
+      $('pwNewUser').value = u.username || '';
     }
     function clearLocal() {
       [TOKEN_KEY, USER_KEY, BASE_KEY, PEND_KEY, REV_KEY, KEY, HISTORY_KEY].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
@@ -1784,12 +1790,7 @@ function csvCell(x){
       document.body.classList.add('locked');
       $('loginScreen').hidden = false;
       $('loginError').textContent = msg || '';
-      fetch('/api/accounts', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (list) {
-        if (!Array.isArray(list) || !list.length) return;
-        var sel = $('loginUser'), cur = sel.value;
-        sel.innerHTML = list.map(function (u) { return '<option value="' + esc(u.id) + '">' + esc(u.name) + '</option>'; }).join('');
-        if (list.some(function (u) { return u.id === cur; })) sel.value = cur;
-      }).catch(function () {});
+      try { var last = JSON.parse(localStorage.getItem(USER_KEY) || 'null'); if (last && last.username && !$('loginUser').value) $('loginUser').value = last.username; } catch (e) {}
     }
     function expired() {
       S.token = null;
@@ -1799,7 +1800,7 @@ function csvCell(x){
     function login(ev) {
       ev.preventDefault();
       var btn = $('loginBtn'); btn.disabled = true; $('loginError').textContent = '';
-      api('POST', '/api/login', { user: $('loginUser').value, password: $('loginPass').value }).then(function (j) {
+      api('POST', '/api/login', { username: $('loginUser').value.trim(), password: $('loginPass').value }).then(function (j) {
         var prev = null; try { prev = JSON.parse(localStorage.getItem(USER_KEY) || 'null'); } catch (e) {}
         S.token = j.token; S.user = j.user;
         localStorage.setItem(TOKEN_KEY, j.token); localStorage.setItem(USER_KEY, JSON.stringify(j.user));
@@ -1822,15 +1823,22 @@ function csvCell(x){
     }
     function changePassword(ev) {
       ev.preventDefault();
-      var msg = $('pwMsg'), a = $('pwNew').value, b = $('pwNew2').value;
-      if (a !== b) { msg.textContent = '兩次輸入的新密碼不一樣。'; return; }
-      if (a.length < 8) { msg.textContent = '新密碼至少 8 個字元。'; return; }
-      msg.textContent = '變更中…';
-      api('POST', '/api/password', { oldPassword: $('pwOld').value, newPassword: a }).then(function (j) {
-        S.token = j.token; localStorage.setItem(TOKEN_KEY, j.token);
-        $('pwForm').reset(); $('pwUsername').value = S.user ? S.user.id : '';
-        msg.textContent = '✓ 密碼已變更。請記住新密碼；這個帳號在其他手機上需要用新密碼重新登入。';
-      }).catch(function (err) { msg.textContent = '變更失敗：' + err.message; });
+      var msg = $('pwMsg'), nu = $('pwNewUser').value.trim(), a = $('pwNew').value, b = $('pwNew2').value;
+      if (!nu || /\s/.test(nu)) { msg.textContent = '帳號名稱不能空白，也不能有空格。'; return; }
+      if (a || b) {
+        if (a !== b) { msg.textContent = '兩次輸入的新密碼不一樣。'; return; }
+        if (a.length < 8) { msg.textContent = '新密碼至少 8 個字元。'; return; }
+      }
+      var userChanged = S.user && nu !== S.user.username;
+      if (!userChanged && !a) { msg.textContent = '沒有要變更的內容。'; return; }
+      msg.textContent = '儲存中…';
+      api('POST', '/api/account', { oldPassword: $('pwOld').value, newUsername: nu, newPassword: a || undefined }).then(function (j) {
+        S.token = j.token; S.user = j.user;
+        localStorage.setItem(TOKEN_KEY, j.token); localStorage.setItem(USER_KEY, JSON.stringify(j.user));
+        $('pwOld').value = ''; $('pwNew').value = ''; $('pwNew2').value = '';
+        showUser();
+        msg.textContent = '✓ 已儲存。下次登入請用帳號「' + j.user.username + '」' + (a ? '和新密碼；這個帳號在其他手機上需要重新登入。' : '（密碼不變）。');
+      }).catch(function (err) { msg.textContent = '儲存失敗：' + err.message; });
     }
     function boot() {
       var cloud = /\.netlify\.app$/.test(location.hostname) || location.port === '8899' || window.APP_FORCE_CLOUD === true;
