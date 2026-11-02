@@ -5,41 +5,19 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>系統已搬到新網址｜出勤與薪資管理</title>
 <link rel="canonical" href="https://attendance-payroll-tw.netlify.app/">
-<noscript><meta http-equiv="refresh" content="0; url=https://attendance-payroll-tw.netlify.app/"></noscript>
+<meta http-equiv="refresh" content="0; url=https://attendance-payroll-tw.netlify.app/">
+<script>location.replace('https://attendance-payroll-tw.netlify.app/');</script>
 <style>
 body{margin:0;font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;background:#eef4f2;color:#1d2b28;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:20px;box-sizing:border-box}
 .card{background:#fff;border-radius:16px;padding:28px 22px;max-width:420px;width:100%;box-shadow:0 4px 18px rgba(0,0,0,.08);text-align:center}
 h1{font-size:22px;margin:0 0 12px;color:#17695c}
-a.btn,button{display:block;width:100%;box-sizing:border-box;margin-top:14px;padding:14px;border-radius:12px;border:0;font-size:17px;font-weight:700;text-decoration:none;cursor:pointer}
-a.btn{background:#17695c;color:#fff}button{background:#dff0ea;color:#17695c}
-p{line-height:1.6;color:#4a5a56}#old{display:none;text-align:left;background:#fff8e1;border-radius:12px;padding:12px 14px;margin-top:16px}
+a{display:block;margin-top:14px;padding:14px;border-radius:12px;background:#17695c;color:#fff;font-size:17px;font-weight:700;text-decoration:none}
 </style>
 </head>
 <body>
 <div class="card">
 <h1>系統已搬到新網址</h1>
-<p>出勤與薪資管理已改為雲端版，老闆與會計登入後共用同一份資料。</p>
-<a class="btn" id="go" href="https://attendance-payroll-tw.netlify.app/">系統已搬到新網址，點此前往</a>
-<div id="old">
-<p><strong>這支手機上有舊版資料。</strong>請先下載備份，到新網址登入後，在「設定與備份 → 匯入 JSON 檔」匯入即可。</p>
-<button id="dl">下載舊資料備份（JSON）</button>
+<a href="https://attendance-payroll-tw.netlify.app/">系統已搬到新網址，點此前往</a>
 </div>
-</div>
-<script>
-(function(){
-  var NEW='https://attendance-payroll-tw.netlify.app/';
-  var st=null,hist=[];
-  try{st=JSON.parse(localStorage.getItem('attendancePayroll.v1')||'null')}catch(e){}
-  try{hist=JSON.parse(localStorage.getItem('attendancePayroll.payslips.v1')||'[]')||[]}catch(e){}
-  var has=(st&&st.employees&&st.employees.length)||(hist&&hist.length);
-  if(!has){location.replace(NEW+location.search+location.hash);return}
-  document.getElementById('old').style.display='block';
-  document.getElementById('dl').onclick=function(){
-    var d={version:1,exportedAt:new Date().toISOString(),employees:st&&st.employees||[],attendance:st&&st.attendance||{},entries:st&&st.entries||[],settings:st&&st.settings||{},payslips:hist};
-    var b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}),a=document.createElement('a');
-    a.href=URL.createObjectURL(b);a.download='出勤薪資-舊版備份-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();
-  };
-})();
-</script>
 </body>
 </html>
