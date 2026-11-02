@@ -490,9 +490,56 @@ main {
 }
 
 
+
+/* ===== 出勤編輯：選取員工與日期 ===== */
+.day-cell{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+.day-cell.selected{outline:3px solid #f2a516;outline-offset:1px;position:relative;z-index:1}
+.grid-table .sticky-name button.name-pick{background:none;border:0;padding:4px 2px;color:var(--brand);font-weight:700;text-decoration:underline;text-underline-offset:3px;min-height:0;cursor:pointer;text-align:left}
+.grid-table tr.row-selected td.sticky-name{background:var(--brand2)}
+.editor-head{position:sticky;top:var(--nav-h,0px);z-index:5;background:var(--brand);color:#fff;border-radius:12px;padding:10px 14px;margin:6px 0 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;box-shadow:var(--shadow)}
+.editor-head strong{font-size:18px}
+.editor-head .muted{color:#e3f3ef}
+.editor-hint{margin:4px 0 8px}
+.day-card{scroll-margin-top:calc(var(--nav-h,0px) + 84px);transition:box-shadow .3s,border-color .3s}
+.ot-hint{font-weight:400;color:var(--muted);font-size:12px}
+.ot-capped .ot-hint{color:var(--red);font-weight:700}
+.day-card.focus-card{border:2px solid #f2a516;box-shadow:0 0 0 4px #f2a51633}
+.day-card .day-title{display:flex;gap:6px;align-items:baseline}
+.day-card .day-title small{color:var(--muted)}
+/* ===== 登入與同步 ===== */
+.login-screen{position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}
+.login-screen[hidden]{display:none}
+.login-card{width:100%;max-width:380px;background:var(--paper);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:24px}
+.login-card h1{margin:0 0 4px;font-size:22px;color:var(--brand)}
+.login-card label{display:block;margin-top:14px;font-weight:600}
+.login-card select,.login-card input{width:100%;margin-top:6px;font-size:17px;padding:11px 12px}
+.login-card button{width:100%;margin-top:18px;font-size:17px;padding:12px}
+.login-error{color:var(--red);min-height:1.4em;margin-top:10px}
+.header-side{display:flex;flex-direction:column;align-items:flex-end;gap:4px;text-align:right}
+.user-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.user-badge{background:#ffffff26;border-radius:999px;padding:2px 10px;font-weight:600}
+.header-side button{background:#ffffff26;color:#fff;border:1px solid #ffffff55;padding:3px 10px;font-size:13px;min-height:0}
+.sync-status{font-size:12px;opacity:.9}
+.sync-status.warn{color:#ffe3a3;opacity:1;font-weight:600}
+body.local-mode .cloud-only,body:not(.local-mode) .local-only{display:none!important}
+body.locked .app-header,body.locked .nav,body.locked main,body.locked .section{display:none!important}
+@media print{.login-screen,.header-side{display:none!important}}
 </style>
 </head>
-<body>
+<body class="locked">
+<div class="login-screen" id="loginScreen" hidden>
+<form class="login-card" id="loginForm" autocomplete="on">
+<h1>出勤與薪資管理</h1>
+<div class="muted">老闆、會計共用資料，請先登入</div>
+<label for="loginUser">帳號</label>
+<select id="loginUser" name="username" autocomplete="username"><option value="boss">老闆</option><option value="accountant">會計</option></select>
+<label for="loginPass">密碼</label>
+<input id="loginPass" name="password" type="password" autocomplete="current-password" required>
+<button type="submit" id="loginBtn">登入</button>
+<div class="login-error" id="loginError" role="alert"></div>
+</form>
+</div>
+
 
 
 <header class="app-header">
@@ -500,11 +547,10 @@ main {
 <div>
 
 <div class="brand">出勤與薪資管理</div>
-<small>小型事業所・本機資料管理</small>
+<small class="cloud-only">老闆・會計共用帳本</small><small class="local-only">小型事業所・本機資料管理</small>
 </div>
 
-<div id="todayLabel">
-</div>
+<div class="header-side no-print"><div id="todayLabel"></div><div class="user-line cloud-only"><span class="user-badge" id="userBadge"></span><button type="button" id="logoutBtn">登出</button></div><div class="sync-status cloud-only" id="syncStatus"></div></div>
 </header>
 
 
@@ -628,7 +674,8 @@ main {
 </table>
 </div>
 
-<h3>手機出勤編輯</h3>
+<h3>出勤編輯</h3>
+<p class="muted editor-hint">點上方表格的格子，下方會顯示該員工並跳到那一天編輯；點員工姓名會跳到今天。長按格子可快速切換狀態。</p>
 
 <div class="legend">
 <span class="work">上班</span>
@@ -755,7 +802,20 @@ main {
 <label class="checkline">
 <input type="checkbox" id="holidayPaid"> 公休是否支薪（預設不支薪）</label>
 
-<div class="notice" style="margin-top:12px">加班費以日薪 × 加班時數 ÷ 6 計算；每 6 小時加班折算 1 個工作日。</div>
+<div class="notice" style="margin-top:12px">加班費以日薪 × 加班時數 ÷ 6 計算；每 6 小時加班折算 1 個工作日；每天加班最多 9 小時（最多多領 1.5 天），超過以 9 小時計。</div>
+</div>
+
+<div class="panel cloud-only" id="pwPanel">
+<h2>帳號與密碼</h2>
+<p class="muted">目前登入：<strong id="pwUserName"></strong>。改密碼後，這個帳號在其他手機上需要重新登入。</p>
+<form id="pwForm" class="pw-form">
+<input type="text" name="username" id="pwUsername" autocomplete="username" hidden>
+<label>目前密碼<input type="password" id="pwOld" autocomplete="current-password" required></label>
+<label>新密碼（至少 8 個字元）<input type="password" id="pwNew" autocomplete="new-password" minlength="8" required></label>
+<label>再輸入一次新密碼<input type="password" id="pwNew2" autocomplete="new-password" minlength="8" required></label>
+<div class="row"><button type="submit">變更密碼</button></div>
+<p class="muted" id="pwMsg" role="status"></p>
+</form>
 </div>
 
 <div class="panel">
@@ -769,7 +829,7 @@ main {
 <label class="file-button">匯入 JSON 檔<input id="backupImport" type="file" accept="application/json,.json">
 </label>
 </div>
-<p class="muted">資料只保存在這個瀏覽器的 localStorage。匯入會覆蓋目前資料，系統會先要求確認。</p><div class="notice"><strong>使用說明</strong><br>資料只保存在這台裝置與目前瀏覽器。可下載薪資單檔案或存成 PDF，保存在手機的「檔案」App；更換裝置時請使用 JSON 備份與匯入。</div>
+<p class="muted local-only">資料只保存在這個瀏覽器。匯入會覆蓋目前資料，系統會先要求確認。</p><div class="notice local-only"><strong>使用說明</strong><br>資料只保存在這台裝置與目前瀏覽器。可下載薪資單檔案或存成 PDF，保存在手機的「檔案」App；更換裝置時請使用 JSON 備份與匯入。</div><p class="muted cloud-only">資料存在雲端，老闆和會計登入後看到的是同一份。建議每月按「匯出全部資料 JSON」留一份備份在手機。匯入會覆蓋雲端上的全部資料，兩支手機都會跟著變，系統會先要求確認。</p><div class="notice cloud-only"><strong>使用說明</strong><br>修改後會自動上傳，畫面右上角顯示「已同步」即完成；另一支手機約 20 秒內會自動更新。薪資單可按「下載」存成檔案，或按「列印」選「另存為 PDF」，保存在手機的「檔案」App。</div>
 </div>
 </section>
 
@@ -856,7 +916,7 @@ function computeEmployee(employee,attendanceRecords,moneyEntries,startDate,endDa
       else if(r.status==='休假')leaveDays++;
       else if(r.status==='公休')holidayDays++;
       var h=Number(r.otHours);
-      if(Number.isFinite(h)&&h>0)otHours+=h}
+      if(Number.isFinite(h)&&h>0)otHours+=Math.min(h,9)}
     );
     var wage=Number(employee&&employee.dailyWage)||0,base=Math.round(wage*(workDays+(settings&&settings.holidayPaid?holidayDays:0))),otPay=Math.round(wage*otHours/6),sums={
       allowance:0,bonus:0,otherPlus:0,insurance:0,advance:0,otherMinus:0}
@@ -917,7 +977,7 @@ function esc(s){
       var v=JSON.parse(localStorage.getItem(KEY)||'null');
       if(v&&Array.isArray(v.employees)&&v.attendance&&Array.isArray(v.entries)){
         state.employees=v.employees;
-        state.attendance=v.attendance;
+        state.attendance=normalizeAttendance(v.attendance);
         state.entries=v.entries;
         state.settings=Object.assign({
           holidayPaid:false}
@@ -931,9 +991,8 @@ function esc(s){
   function save(){
     try{
       localStorage.setItem(KEY,JSON.stringify(state))}
-    catch(e){
-      alert('無法儲存資料，請確認瀏覽器儲存空間。')}
-    }
+    catch(e){}
+    Sync.queue()}
   function showSection(name){
     document.querySelectorAll('.section').forEach(function(s){
       s.classList.toggle('active',s.id==='section-'+name)}
@@ -978,15 +1037,16 @@ function openEmployee(emp){
     $('employeeWage').value=emp?emp.dailyWage:'';
     $('employeeNote').value=emp?emp.note||'':'';
     (function(d){try{try{if(typeof d.showModal==='function')d.showModal();else d.setAttribute('open','')}catch(ignore){d.setAttribute('open','')}}catch(ignore){d.setAttribute('open','')}})($('employeeDialog'))}
-function getRecord(emp,date){
+function clampOT(v){var h=Number(v);return Number.isFinite(h)&&h>0?Math.min(9,Math.round(h*100)/100):0}
+  function normalizeAttendance(att){Object.keys(att||{}).forEach(function(k){var r=att[k];if(r&&typeof r==='object'&&'otHours' in r)r.otHours=clampOT(r.otHours)});return att}
+  function getRecord(emp,date){
     return state.attendance[emp+'|'+date]||{
       employeeId:emp,date:date,status:'',otHours:0,note:''}
     }
   function writeRecord(record){
     state.attendance[record.employeeId+'|'+record.date]=record;
     save();
-    var badge=$('attendanceEditor').querySelector('[data-badge-date="'+record.date+'"]');
-    if(badge)badge.textContent=record.status||'未填';
+    syncEditorCard(record);
     renderAttendanceGrid();
     renderAttendanceSummary();
     renderHome()}
@@ -994,19 +1054,46 @@ function cycleStatus(emp,date){
     var r=getRecord(emp,date),i=STATUSES.indexOf(r.status);
     r.status=STATUSES[(i+1)%STATUSES.length];
     writeRecord(r)}
-function renderAttendanceGrid(){
+var attSel={date:''};
+  function syncEditorCard(r){
+    var ed=$('attendanceEditor');
+    if(!ed||$('attendanceEmployee').value!==r.employeeId)return;
+    var badge=ed.querySelector('[data-badge-date="'+r.date+'"]');
+    if(badge)badge.textContent=r.status||'未填';
+    var sel=ed.querySelector('select[data-record="status"][data-date="'+r.date+'"]');
+    if(sel&&sel.value!==(r.status||''))sel.value=r.status||'';
+    var ot=ed.querySelector('input[data-record="otHours"][data-date="'+r.date+'"]');
+    if(ot&&document.activeElement!==ot&&Number(ot.value)!==clampOT(r.otHours))ot.value=clampOT(r.otHours)}
+  function navOffset(){var n=document.querySelector('.nav');var h=0;if(n){var cs=getComputedStyle(n);if(cs.position==='sticky'||cs.position==='fixed')h=n.offsetHeight}document.documentElement.style.setProperty('--nav-h',h+'px')}
+  if(typeof window!=='undefined'){window.addEventListener('resize',navOffset);setTimeout(navOffset,0)}
+  function selectAttendance(emp,date,focus){
+    navOffset();
+    var m=$('attendanceMonth').value||monthOf(today());
+    if(!date)date=monthOf(today())===m?today():m+'-01';
+    attSel.date=date;
+    if($('attendanceEmployee').value!==emp){$('attendanceEmployee').value=emp;renderAttendance()}
+    else renderAttendanceGrid();
+    var card=$('daycard-'+date);
+    if(!card)return;
+    document.querySelectorAll('.day-card.focus-card').forEach(function(c){c.classList.remove('focus-card')});
+    card.classList.add('focus-card');
+    if(card.scrollIntoView){try{card.scrollIntoView({behavior:'smooth',block:'start'})}catch(e){card.scrollIntoView()}}
+    if(focus!==false){var f=card.querySelector('select');if(f)try{f.focus({preventScroll:true})}catch(e){}}
+    }
+  function renderAttendanceGrid(){
+    var selEmp=$('attendanceEmployee').value,selDate=attSel.date;
     var table=$('attendanceGrid'),m=$('attendanceMonth').value||monthOf(today()),n=daysInMonth(m),html='<thead><tr><th class="sticky-name">員工 / 日期</th>';
     for(var d=1;
     d<=n;
     d++){var wd=new Date(m+'-'+pad(d)+'T00:00:00').getDay();html+='<th class="'+(wd===0||wd===6?'weekend':'')+'">'+d+'<br><small>'+'日一二三四五六'[wd]+'</small></th>'}
     html+='</tr></thead><tbody>';
     state.employees.forEach(function(e){
-      html+='<tr><td class="sticky-name"><strong>'+esc(e.name)+'</strong></td>';
+      html+='<tr'+(e.id===selEmp?' class="row-selected"':'')+'><td class="sticky-name"><button type="button" class="name-pick" data-pick-emp="'+esc(e.id)+'">'+esc(e.name)+'</button></td>';
       for(var day=1;
       day<=n;
       day++){
         var dt=m+'-'+pad(day),rec=getRecord(e.id,dt),cl=rec.status==='上班'?'work':rec.status==='休假'?'leave':rec.status==='公休'?'holiday':'empty';
-        html+='<td><button class="day-cell '+cl+(dt===today()?' today':'')+'" title="'+esc(e.name)+' '+dt+' '+(rec.status||'未填')+'" data-cycle="'+esc(e.id)+'|'+dt+'">'+(rec.status?rec.status.slice(0,1):'·')+(Number(rec.otHours)>0?'<small>+'+esc(rec.otHours)+'h</small>':'')+'</button></td>'}
+        html+='<td><button type="button" class="day-cell '+cl+(dt===today()?' today':'')+(e.id===selEmp&&dt===selDate?' selected':'')+'" title="'+esc(e.name)+' '+dt+' '+(rec.status||'未填')+'" data-cycle="'+esc(e.id)+'|'+dt+'">'+(rec.status?rec.status.slice(0,1):'·')+(clampOT(rec.otHours)>0?'<small>+'+esc(clampOT(rec.otHours))+'h</small>':'')+'</button></td>'}
       html+='</tr>'}
     );
     table.innerHTML=html+'</tbody>'}
@@ -1019,7 +1106,7 @@ function renderAttendanceSummary(){
     d++){
       var r=getRecord(emp,m+'-'+pad(d));
       if(r.status==='上班')work++;
-      ot+=Math.max(0,Number(r.otHours)||0)}
+      ot+=clampOT(r.otHours)}
     $('attendanceSummary').textContent='本月：上班 '+work+' 天，加班 '+(+ot.toFixed(2))+' 小時 = '+(+(ot/6).toFixed(2))+' 天'}
 function renderAttendance(){
     var m=$('attendanceMonth').value||monthOf(today()),n=daysInMonth(m),table=$('attendanceGrid');
@@ -1030,17 +1117,19 @@ function renderAttendance(){
       return}
     renderAttendanceGrid();
 var emp=$('attendanceEmployee').value||state.employees[0].id,ed=$('attendanceEditor');
-    ed.innerHTML='<div id="attendanceSummary" class="muted"></div>';
+    var empObj=state.employees.find(function(x){return x.id===emp})||state.employees[0];emp=empObj.id;
+    ed.innerHTML='<div class="editor-head" id="editorHead"><strong>'+esc(empObj.name)+' 的出勤</strong><span class="muted">'+esc(m.replace('-','年'))+'月</span><div id="attendanceSummary" class="muted" style="flex-basis:100%"></div></div>';
     var cards='';
     for(var day=1;
     day<=n;
     day++){
       var date=m+'-'+pad(day),r=getRecord(emp,date);
-      cards+='<div class="employee-card"><div class="row between"><strong>'+m+'/'+day+'</strong><span class="badge" data-badge-date="'+date+'">'+(r.status||'未填')+'</span></div><div class="mobile-editor" style="margin-top:10px"><label>出勤狀態<select data-record="status" data-date="'+date+'" data-emp="'+esc(emp)+'"><option value="">未填</option><option>上班</option><option>休假</option><option>公休</option></select></label><label>加班時數<input data-record="otHours" data-date="'+date+'" data-emp="'+esc(emp)+'" type="number" min="0" step="0.1" value="'+esc(r.otHours||0)+'"></label><label class="wide">其他 / 備註<input data-record="note" data-date="'+date+'" data-emp="'+esc(emp)+'" value="'+esc(r.note||'')+'"></label></div></div>'}
+      var wdn='日一二三四五六'[new Date(date+'T00:00:00').getDay()];
+      cards+='<div class="employee-card day-card" id="daycard-'+date+'" data-card-date="'+date+'"><div class="row between"><div class="day-title"><strong>'+Number(m.slice(5))+'/'+day+'（'+wdn+'）</strong><small>'+esc(empObj.name)+'</small></div><span class="badge" data-badge-date="'+date+'" data-emp="'+esc(emp)+'">'+(r.status||'未填')+'</span></div><div class="mobile-editor" style="margin-top:10px"><label>出勤狀態<select autocomplete="off" data-record="status" data-date="'+date+'" data-emp="'+esc(emp)+'">'+STATUSES.map(function(st){return '<option value="'+st+'"'+(st===(r.status||'')?' selected':'')+'>'+(st||'未填')+'</option>'}).join('')+'</select></label><label>加班時數 <small class="ot-hint">最多 9 小時</small><input autocomplete="off" inputmode="decimal" data-record="otHours" data-date="'+date+'" data-emp="'+esc(emp)+'" type="number" min="0" max="9" step="0.5" value="'+esc(clampOT(r.otHours))+'"></label><label class="wide">其他 / 備註<input autocomplete="off" data-record="note" data-date="'+date+'" data-emp="'+esc(emp)+'" value="'+esc(r.note||'')+'"></label></div></div>'}
     ed.insertAdjacentHTML('beforeend',cards);
     ed.querySelectorAll('[data-record]').forEach(function(input){
       var r=getRecord(emp,input.dataset.date);
-      input.value=r[input.dataset.record]|| (input.dataset.record==='otHours'?0:'')}
+      input.value=input.dataset.record==='otHours'?clampOT(r.otHours):(r[input.dataset.record]||'')}
     );
     $('attendanceEmployee').value=emp;
     renderAttendanceSummary();
@@ -1295,8 +1384,8 @@ function csvCell(x){
     } catch (e) { history = []; }
   }
   function saveHistory() {
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }
-    catch (e) { alert('無法儲存薪資單紀錄，請確認瀏覽器儲存空間。'); }
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) {}
+    Sync.queue();
   }
   function fmtNum(n) { return (+(Number(n) || 0).toFixed(2)).toLocaleString('zh-TW', { maximumFractionDigits: 2 }); }
   function periodText(meta) {
@@ -1326,7 +1415,7 @@ function csvCell(x){
       var attendance = allRecords
         .filter(function (r) { return r.employeeId === e.id && r.date >= p.start && r.date <= end && (r.status || Number(r.otHours) > 0 || r.note); })
         .sort(function (a, b) { return a.date.localeCompare(b.date); })
-        .map(function (r) { return { date: r.date, status: r.status || '', otHours: Number(r.otHours) || 0, note: r.note || '' }; });
+        .map(function (r) { return { date: r.date, status: r.status || '', otHours: clampOT(r.otHours), note: r.note || '' }; });
       var entries = state.entries
         .filter(function (x) { return x.employeeId === e.id && x.date >= p.start && x.date <= end; })
         .sort(function (a, b) { return a.date.localeCompare(b.date); })
@@ -1373,7 +1462,7 @@ function csvCell(x){
       '<div><span>加班折算</span><b>' + fmtNum(f.otDays) + ' 天</b></div></div>' +
       '<h3>應發項目</h3><table><tbody>' +
       line('基本薪', '日薪 ' + money(row.dailyWage) + ' × ' + paidDays + ' 天' + (meta.settings && meta.settings.holidayPaid && f.holidayDays ? '（含公休支薪）' : ''), f.base) +
-      line('加班費', '日薪 ' + money(row.dailyWage) + ' × ' + fmtNum(f.otHours) + ' 小時 ÷ 6（6 小時折 1 天）', f.otPay) +
+      line('加班費', '日薪 ' + money(row.dailyWage) + ' × ' + fmtNum(f.otHours) + ' 小時 ÷ 6（6 小時折 1 天，每天最多 9 小時）', f.otPay) +
       entryLines(PLUS_TYPES, false) +
       '<tr class="sum"><th colspan="2">應發合計</th><th class="amount">' + money(plusTotal) + '</th></tr></tbody></table>' +
       '<h3>應扣項目</h3><table><tbody>' +
@@ -1530,7 +1619,221 @@ function csvCell(x){
       downloadText(slipFileName(activeSlip.rows, activeSlip.meta), payslipDocument(activeSlip.rows, activeSlip.meta, '薪資單 ' + periodText(activeSlip.meta)), 'text/html;charset=utf-8');
     };
   }
-  globalThis.PayrollApp = { buildSnapshot: buildSnapshot, payslipHTML: payslipHTML, snapshotCSV: snapshotCSV, history: function () { return history; } };
+
+  /* ===== 雲端同步（老闆・會計共用） ===== */
+  var Sync = (function () {
+    var TOKEN_KEY = 'attendancePayroll.token', USER_KEY = 'attendancePayroll.user',
+      BASE_KEY = 'attendancePayroll.base', PEND_KEY = 'attendancePayroll.pending', REV_KEY = 'attendancePayroll.rev';
+    var S = { token: null, user: null, base: null, rev: 0, pending: [], inflight: false, latest: null, timer: null, poll: null };
+    function clone(o) { return JSON.parse(JSON.stringify(o)); }
+    function enc(id) { return encodeURIComponent(String(id)).replace(/[!'()*~]/g, function (c) { return '%' + c.charCodeAt(0).toString(16).toUpperCase(); }); }
+    function toRecords() {
+      var r = {};
+      state.employees.forEach(function (e) { r['emp:' + enc(e.id)] = e; });
+      Object.keys(state.attendance).forEach(function (k) { r['att:' + enc(k)] = state.attendance[k]; });
+      state.entries.forEach(function (e) { r['ent:' + enc(e.id)] = e; });
+      Object.keys(state.settings || {}).forEach(function (k) { r['set:' + enc(k)] = { v: state.settings[k] }; });
+      history.forEach(function (h) { r['slip:' + enc(h.id)] = h; });
+      return clone(r);
+    }
+    function fromRecords(rec) {
+      var st = { employees: [], attendance: {}, entries: [], settings: { holidayPaid: false } }, h = [];
+      Object.keys(rec).forEach(function (k) {
+        var i = k.indexOf(':'), p = k.slice(0, i), id = decodeURIComponent(k.slice(i + 1)), v = rec[k];
+        if (p === 'emp') st.employees.push(v);
+        else if (p === 'att') { if (v && typeof v === 'object' && 'otHours' in v) v.otHours = clampOT(v.otHours); st.attendance[id] = v; }
+        else if (p === 'ent') st.entries.push(v);
+        else if (p === 'set') st.settings[id] = v && v.v;
+        else if (p === 'slip') h.push(v);
+      });
+      h.sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
+      return { state: st, history: h };
+    }
+    function diff(a, b) {
+      var ops = [];
+      Object.keys(b).forEach(function (k) { if (!(k in a) || JSON.stringify(a[k]) !== JSON.stringify(b[k])) ops.push({ k: k, v: b[k] }); });
+      Object.keys(a).forEach(function (k) { if (!(k in b)) ops.push({ k: k, v: null }); });
+      return ops;
+    }
+    function applyOps(rec, ops) { ops.forEach(function (o) { if (o.v === null) delete rec[o.k]; else rec[o.k] = clone(o.v); }); return rec; }
+    function persist() {
+      try {
+        localStorage.setItem(BASE_KEY, JSON.stringify(S.base));
+        localStorage.setItem(PEND_KEY, JSON.stringify(S.pending));
+        localStorage.setItem(REV_KEY, String(S.rev));
+      } catch (e) {}
+    }
+    function api(method, url, body) {
+      var h = { 'content-type': 'application/json' };
+      if (S.token) h.authorization = 'Bearer ' + S.token;
+      return fetch(url, { method: method, headers: h, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (!r.ok) { var e = new Error(j.error || ('HTTP ' + r.status)); e.status = r.status; throw e; }
+          return j;
+        });
+      });
+    }
+    function fmt(iso) { var d = new Date(iso); return isNaN(d) ? '' : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+    function status(kind, text) { var el = $('syncStatus'); if (!el) return; el.textContent = text; el.classList.toggle('warn', kind === 'warn'); }
+    function okStatus(doc) {
+      status('ok', '✓ 已同步' + (doc && doc.updatedAt ? '｜最後修改 ' + (doc.updatedBy || '') + ' ' + fmt(doc.updatedAt) : ''));
+    }
+    function safeToRender() {
+      if (document.querySelector('dialog[open]')) return false;
+      var a = document.activeElement;
+      return !(a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && /^(text|number|password)$/.test(a.type))));
+    }
+    function rerender() {
+      $('holidayPaid').checked = !!state.settings.holidayPaid;
+      refreshSelects(); renderEmployees(); renderAttendance(); renderEntries(); renderReport(); renderHome(); renderHistory();
+    }
+    function tryApply() {
+      var doc = S.latest;
+      if (!doc || S.inflight || S.pending.length) return;
+      if (!safeToRender()) { clearTimeout(S.applyTimer); S.applyTimer = setTimeout(tryApply, 2000); return; }
+      S.latest = null;
+      S.rev = doc.rev || 0;
+      var exp = clone(doc.records || {});
+      var changed = diff(S.base || {}, exp).length > 0 || diff(toRecords(), exp).length > 0;
+      S.base = exp;
+      persist();
+      if (changed) {
+        var r = fromRecords(exp);
+        state = r.state; history = r.history;
+        try { localStorage.setItem(KEY, JSON.stringify(state)); localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) {}
+        rerender();
+      }
+      okStatus(doc);
+    }
+    function compact(ops) {
+      var last = {}; ops.forEach(function (o, i) { last[o.k] = i; });
+      return ops.filter(function (o, i) { return last[o.k] === i; });
+    }
+    function flush() {
+      if (S.inflight || !S.token) return;
+      if (!S.pending.length) { tryApply(); return; }
+      var n = S.pending.length;
+      S.inflight = true;
+      status('ok', '上傳中…');
+      api('POST', '/api/data', { ops: compact(S.pending.slice(0, n)) }).then(function (doc) {
+        S.inflight = false;
+        S.pending = S.pending.slice(n);
+        S.latest = doc;
+        persist();
+        if (S.pending.length) flush(); else tryApply();
+      }).catch(function (err) {
+        S.inflight = false;
+        if (err.status === 401) { expired(); return; }
+        status('warn', '⚠ 尚未上傳 ' + S.pending.length + ' 筆變更（' + (err.status ? err.message : '網路中斷') + '），會自動重試');
+        clearTimeout(S.timer); S.timer = setTimeout(flush, 15000);
+      });
+    }
+    function queue() {
+      if (!S.token) return;
+      var cur = toRecords(), ops = diff(S.base || {}, cur);
+      if (!ops.length) return;
+      S.pending = S.pending.concat(ops);
+      S.base = cur;
+      persist();
+      clearTimeout(S.timer); S.timer = setTimeout(flush, 300);
+    }
+    function pull() {
+      if (!S.token || S.inflight) return Promise.resolve();
+      if (S.pending.length) { flush(); return Promise.resolve(); }
+      return api('GET', '/api/data').then(function (doc) {
+        if ((doc.rev || 0) !== S.rev || !S.base) { S.latest = doc; tryApply(); } else okStatus(doc);
+      }).catch(function (err) {
+        if (err.status === 401) expired(); else status('warn', '⚠ 無法連線，顯示的是這支手機上次的資料');
+      });
+    }
+    function showApp() {
+      document.body.classList.remove('locked');
+      $('loginScreen').hidden = true;
+      $('userBadge').textContent = S.user ? S.user.name : '';
+      $('pwUserName').textContent = S.user ? S.user.name : '';
+      $('pwUsername').value = S.user ? S.user.id : '';
+      if (!S.poll) {
+        S.poll = setInterval(function () { if (document.visibilityState !== 'hidden') pull(); }, 20000);
+        document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') pull(); });
+        window.addEventListener('online', function () { flush(); pull(); });
+      }
+    }
+    function clearLocal() {
+      [TOKEN_KEY, USER_KEY, BASE_KEY, PEND_KEY, REV_KEY, KEY, HISTORY_KEY].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+    }
+    function showLogin(msg) {
+      document.body.classList.add('locked');
+      $('loginScreen').hidden = false;
+      $('loginError').textContent = msg || '';
+      fetch('/api/accounts', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (list) {
+        if (!Array.isArray(list) || !list.length) return;
+        var sel = $('loginUser'), cur = sel.value;
+        sel.innerHTML = list.map(function (u) { return '<option value="' + esc(u.id) + '">' + esc(u.name) + '</option>'; }).join('');
+        if (list.some(function (u) { return u.id === cur; })) sel.value = cur;
+      }).catch(function () {});
+    }
+    function expired() {
+      S.token = null;
+      try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+      showLogin('登入已過期或密碼已變更，請重新登入。' + (S.pending.length ? '（這支手機還有 ' + S.pending.length + ' 筆變更，登入後會自動上傳）' : ''));
+    }
+    function login(ev) {
+      ev.preventDefault();
+      var btn = $('loginBtn'); btn.disabled = true; $('loginError').textContent = '';
+      api('POST', '/api/login', { user: $('loginUser').value, password: $('loginPass').value }).then(function (j) {
+        var prev = null; try { prev = JSON.parse(localStorage.getItem(USER_KEY) || 'null'); } catch (e) {}
+        S.token = j.token; S.user = j.user;
+        localStorage.setItem(TOKEN_KEY, j.token); localStorage.setItem(USER_KEY, JSON.stringify(j.user));
+        $('loginPass').value = '';
+        showApp();
+        status('ok', '載入中…');
+        if (!S.pending.length || (prev && prev.id !== j.user.id && !confirm('這支手機上有 ' + S.pending.length + ' 筆尚未上傳的變更，要上傳嗎？（按「取消」會捨棄）'))) {
+          S.pending = []; S.base = null; S.rev = -1; persist();
+        }
+        return pull();
+      }).catch(function (err) {
+        $('loginError').textContent = err.message || '無法連線，請確認網路';
+      }).then(function () { btn.disabled = false; });
+    }
+    function logout() {
+      if (S.pending.length && !confirm('還有 ' + S.pending.length + ' 筆變更尚未上傳，登出會捨棄。確定登出？')) return;
+      if (!S.pending.length && !confirm('確定登出？')) return;
+      clearLocal();
+      location.reload();
+    }
+    function changePassword(ev) {
+      ev.preventDefault();
+      var msg = $('pwMsg'), a = $('pwNew').value, b = $('pwNew2').value;
+      if (a !== b) { msg.textContent = '兩次輸入的新密碼不一樣。'; return; }
+      if (a.length < 8) { msg.textContent = '新密碼至少 8 個字元。'; return; }
+      msg.textContent = '變更中…';
+      api('POST', '/api/password', { oldPassword: $('pwOld').value, newPassword: a }).then(function (j) {
+        S.token = j.token; localStorage.setItem(TOKEN_KEY, j.token);
+        $('pwForm').reset(); $('pwUsername').value = S.user ? S.user.id : '';
+        msg.textContent = '✓ 密碼已變更。請記住新密碼；這個帳號在其他手機上需要用新密碼重新登入。';
+      }).catch(function (err) { msg.textContent = '變更失敗：' + err.message; });
+    }
+    function boot() {
+      var cloud = /\.netlify\.app$/.test(location.hostname) || location.port === '8899' || window.APP_FORCE_CLOUD === true;
+      if (!cloud) { document.body.classList.remove('locked'); document.body.classList.add('local-mode'); return; }
+      $('loginForm').addEventListener('submit', login);
+      $('logoutBtn').addEventListener('click', logout);
+      $('pwForm').addEventListener('submit', changePassword);
+      S.token = localStorage.getItem(TOKEN_KEY);
+      try {
+        S.user = JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+        S.base = JSON.parse(localStorage.getItem(BASE_KEY) || 'null');
+        S.pending = JSON.parse(localStorage.getItem(PEND_KEY) || '[]') || [];
+        S.rev = Number(localStorage.getItem(REV_KEY) || -1);
+      } catch (e) { S.base = null; S.pending = []; S.rev = -1; }
+      if (!S.token) { clearLocal(); state.employees = []; state.attendance = {}; state.entries = []; history = []; rerender(); showLogin(); return; }
+      showApp();
+      status('ok', '連線中…');
+      flush(); pull();
+    }
+    return { queue: queue, boot: boot, pull: pull, _s: S, _fromRecords: fromRecords };
+  })();
+  globalThis.PayrollApp = { sync: Sync, buildSnapshot: buildSnapshot, payslipHTML: payslipHTML, snapshotCSV: snapshotCSV, history: function () { return history; } };
 
   function init(){
     loadHistory();
@@ -1612,23 +1915,34 @@ function csvCell(x){
       }
     );
     $('attendanceMonth').onchange=renderAttendance;
-    $('attendanceEmployee').onchange=renderAttendance;
+    $('attendanceEmployee').onchange=function(){attSel.date='';renderAttendance()};
+    var lp={t:null,fired:false};
+    $('attendanceGrid').addEventListener('pointerdown',function(ev){
+      var b=ev.target.closest('[data-cycle]');lp.fired=false;clearTimeout(lp.t);
+      if(!b)return;
+      lp.t=setTimeout(function(){lp.fired=true;var bits=b.dataset.cycle.split('|');attSel.date=bits[1];cycleStatus(bits[0],bits[1]);if(navigator.vibrate)try{navigator.vibrate(15)}catch(e){}},550)});
+    ['pointerup','pointercancel','pointerleave','scroll'].forEach(function(n){$('attendanceGrid').addEventListener(n,function(){clearTimeout(lp.t)},true)});
+    $('attendanceGrid').closest('.table-wrap').addEventListener('scroll',function(){clearTimeout(lp.t)},{passive:true});
+    $('attendanceGrid').addEventListener('contextmenu',function(ev){if(ev.target.closest('[data-cycle]'))ev.preventDefault()});
     $('attendanceGrid').addEventListener('click',function(ev){
+      var n=ev.target.closest('[data-pick-emp]');
+      if(n){selectAttendance(n.dataset.pickEmp,'');return}
       var b=ev.target.closest('[data-cycle]');
-      if(b){
-        var bits=b.dataset.cycle.split('|');
-        cycleStatus(bits[0],bits[1])}
-      }
+      if(!b)return;
+      if(lp.fired){lp.fired=false;return}
+      var bits=b.dataset.cycle.split('|');
+      selectAttendance(bits[0],bits[1])}
     );
     $('attendanceEditor').addEventListener('change',function(ev){
       var el=ev.target.closest('[data-record]');
       if(!el)return;
       var r=getRecord(el.dataset.emp,el.dataset.date),k=el.dataset.record;
-      r[k]=k==='otHours'?Math.max(0,Number(el.value)||0):el.value;
+      r[k]=k==='otHours'?clampOT(el.value):el.value;
+      if(k==='otHours'&&String(r[k])!==String(el.value)){el.value=r[k];if(Number(el.value)>=9)el.closest('label').classList.add('ot-capped')}
       state.attendance[r.employeeId+'|'+r.date]=r;
       save();
-      var badge=$('attendanceEditor').querySelector('[data-badge-date="'+r.date+'"]');
-      if(badge)badge.textContent=r.status||'未填';
+      attSel.date=r.date;
+      syncEditorCard(r);
       renderAttendanceGrid();
       renderAttendanceSummary();
       renderHome()}
@@ -1750,10 +2064,10 @@ function csvCell(x){
           )||v.entries.some(function(e){
             return !e.id||!e.employeeId||!MONEY_TYPES[e.type]||!Number.isFinite(Number(e.amount))||!/^\d{4}-\d{2}-\d{2}$/.test(e.date)}
           ))throw new Error('格式不符');
-          if(!confirm('匯入會覆蓋目前所有員工、出勤、加扣項與設定。確定繼續？'))return;
+          if(!confirm(!document.body.classList.contains('local-mode')?'匯入會覆蓋雲端上所有員工、出勤、加扣項、設定與薪資單紀錄（老闆和會計的手機都會變成這份）。確定繼續？':'匯入會覆蓋目前所有員工、出勤、加扣項與設定。確定繼續？'))return;
           history=Array.isArray(v.payslips)?v.payslips:history;localStorage.setItem(HISTORY_KEY,JSON.stringify(history));
           state={
-            employees:v.employees,attendance:v.attendance,entries:v.entries,settings:Object.assign({
+            employees:v.employees,attendance:normalizeAttendance(v.attendance),entries:v.entries,settings:Object.assign({
               holidayPaid:false}
             ,v.settings)}
           ;
@@ -1769,8 +2083,9 @@ function csvCell(x){
       reader.readAsText(file)}
     ;
     }
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);
-  else init();
+function start(){init();Sync.boot()}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);
+  else start();
 }
 )();
 </script>
