@@ -212,6 +212,12 @@ tbody tr:last-child td {
 .day-cell.work {
   background:#dbf1e4;
   color:#176442}
+.day-cell.half {
+  background:linear-gradient(135deg,#dbf1e4 50%,#fff 50%);
+  color:#176442;border:1px solid #9fd3b5}
+.legend .half {
+  background:linear-gradient(135deg,#dbf1e4 50%,#fff 50%);
+  color:#176442;border:1px solid #9fd3b5}
 .day-cell.leave {
   background:#fff0d4;
   color:#825710}
@@ -652,7 +658,7 @@ body.locked .app-header,body.locked .nav,body.locked main,body.locked .section{d
 
 <h2>每日出勤</h2>
 
-<div class="muted">點選格子可循環切換：未填 → 上班 → 休假 → 公休</div>
+<div class="muted">狀態：全天（1 天）、半天（0.5 天）、休假、公休。點格子到下方編輯；長按格子可依序切換：未填 → 全天 → 半天 → 休假 → 公休</div>
 </div>
 
 <label>月份<input id="attendanceMonth" type="month">
@@ -665,7 +671,7 @@ body.locked .app-header,body.locked .nav,body.locked main,body.locked .section{d
 </select>
 </label>
 
-<button id="quickWeekdays" class="secondary">本月全部平日設為上班</button>
+<button id="quickWeekdays" class="secondary">本月全部平日設為全天</button>
 </div>
 
 <div class="table-wrap">
@@ -678,7 +684,8 @@ body.locked .app-header,body.locked .nav,body.locked main,body.locked .section{d
 <p class="muted editor-hint">點上方表格的格子，下方會顯示該員工並跳到那一天編輯；點員工姓名會跳到今天。長按格子可快速切換狀態。</p>
 
 <div class="legend">
-<span class="work">上班</span>
+<span class="work">全天</span>
+<span class="half">半天</span>
 <span class="leave">休假</span>
 <span class="holiday">公休</span>
 <span class="empty">未填</span>
@@ -909,15 +916,17 @@ function periods(year,month){
       id:'mtd',label:'月初至今（累計）',start:d(1),end:d(last),cumulative:true}
     ]}
 function computeEmployee(employee,attendanceRecords,moneyEntries,startDate,endDate,settings){
-    var workDays=0,leaveDays=0,holidayDays=0,otHours=0;
+    var fullDays=0,halfDays=0,leaveDays=0,holidayDays=0,otHours=0;
     (attendanceRecords||[]).forEach(function(r){
       if(!r||!inRange(r.date,startDate,endDate))return;
-      if(r.status==='上班')workDays++;
+      if(r.status==='全天'||r.status==='上班')fullDays++;
+      else if(r.status==='半天')halfDays++;
       else if(r.status==='休假')leaveDays++;
       else if(r.status==='公休')holidayDays++;
       var h=Number(r.otHours);
       if(Number.isFinite(h)&&h>0)otHours+=Math.min(h,9)}
     );
+    var workDays=fullDays+halfDays*0.5;
     var wage=Number(employee&&employee.dailyWage)||0,base=Math.round(wage*(workDays+(settings&&settings.holidayPaid?holidayDays:0))),otPay=Math.round(wage*otHours/6),sums={
       allowance:0,bonus:0,otherPlus:0,insurance:0,advance:0,otherMinus:0}
     ;
@@ -931,7 +940,7 @@ function computeEmployee(employee,attendanceRecords,moneyEntries,startDate,endDa
     );
     var net=Math.round(base+otPay+sums.allowance+sums.bonus+sums.otherPlus-sums.insurance-sums.advance-sums.otherMinus);
     return {
-      workDays:workDays,leaveDays:leaveDays,holidayDays:holidayDays,otHours:otHours,otDays:otHours/6,base:base,otPay:otPay,allowance:sums.allowance,bonus:sums.bonus,otherPlus:sums.otherPlus,insurance:sums.insurance,advance:sums.advance,otherMinus:sums.otherMinus,net:net}
+      fullDays:fullDays,halfDays:halfDays,workDays:workDays,leaveDays:leaveDays,holidayDays:holidayDays,otHours:otHours,otDays:otHours/6,base:base,otPay:otPay,allowance:sums.allowance,bonus:sums.bonus,otherPlus:sums.otherPlus,insurance:sums.insurance,advance:sums.advance,otherMinus:sums.otherMinus,net:net}
     }
 global.Payroll={
     computeEmployee:computeEmployee,periods:periods}
@@ -943,7 +952,7 @@ global.Payroll={
   if(typeof document==='undefined')return;
   var $=function(id){
     return document.getElementById(id)}
-  ,KEY='attendancePayroll.v1',STATUSES=['','上班','休假','公休'],MONEY_TYPES={
+  ,KEY='attendancePayroll.v1',STATUSES=['','全天','半天','休假','公休'],MONEY_TYPES={
     allowance:'津貼',bonus:'工作獎金',otherPlus:'其他加項',insurance:'勞健保扣除',advance:'預支薪水扣除',otherMinus:'其他扣項'}
   ,state={
     employees:[],attendance:{
@@ -1038,7 +1047,8 @@ function openEmployee(emp){
     $('employeeNote').value=emp?emp.note||'':'';
     (function(d){try{try{if(typeof d.showModal==='function')d.showModal();else d.setAttribute('open','')}catch(ignore){d.setAttribute('open','')}}catch(ignore){d.setAttribute('open','')}})($('employeeDialog'))}
 function clampOT(v){var h=Number(v);return Number.isFinite(h)&&h>0?Math.min(9,Math.round(h*100)/100):0}
-  function normalizeAttendance(att){Object.keys(att||{}).forEach(function(k){var r=att[k];if(r&&typeof r==='object'&&'otHours' in r)r.otHours=clampOT(r.otHours)});return att}
+  function normalizeRecord(r){if(r&&typeof r==='object'){if('otHours' in r)r.otHours=clampOT(r.otHours);if(r.status==='上班')r.status='全天'}return r}
+  function normalizeAttendance(att){Object.keys(att||{}).forEach(function(k){normalizeRecord(att[k])});return att}
   function getRecord(emp,date){
     return state.attendance[emp+'|'+date]||{
       employeeId:emp,date:date,status:'',otHours:0,note:''}
@@ -1092,7 +1102,7 @@ var attSel={date:''};
       for(var day=1;
       day<=n;
       day++){
-        var dt=m+'-'+pad(day),rec=getRecord(e.id,dt),cl=rec.status==='上班'?'work':rec.status==='休假'?'leave':rec.status==='公休'?'holiday':'empty';
+        var dt=m+'-'+pad(day),rec=getRecord(e.id,dt),cl=(rec.status==='全天'||rec.status==='上班')?'work':rec.status==='半天'?'half':rec.status==='休假'?'leave':rec.status==='公休'?'holiday':'empty';
         html+='<td><button type="button" class="day-cell '+cl+(dt===today()?' today':'')+(e.id===selEmp&&dt===selDate?' selected':'')+'" title="'+esc(e.name)+' '+dt+' '+(rec.status||'未填')+'" data-cycle="'+esc(e.id)+'|'+dt+'">'+(rec.status?rec.status.slice(0,1):'·')+(clampOT(rec.otHours)>0?'<small>+'+esc(clampOT(rec.otHours))+'h</small>':'')+'</button></td>'}
       html+='</tr>'}
     );
@@ -1100,14 +1110,14 @@ var attSel={date:''};
 function renderAttendanceSummary(){
     var emp=$('attendanceEmployee').value||state.employees[0]?.id;
     if(!emp||!$('attendanceSummary'))return;
-    var m=$('attendanceMonth').value||monthOf(today()),work=0,ot=0;
+    var m=$('attendanceMonth').value||monthOf(today()),work=0,half=0,ot=0;
     for(var d=1;
     d<=daysInMonth(m);
     d++){
       var r=getRecord(emp,m+'-'+pad(d));
-      if(r.status==='上班')work++;
+      if(r.status==='全天'||r.status==='上班')work++;else if(r.status==='半天')half++;
       ot+=clampOT(r.otHours)}
-    $('attendanceSummary').textContent='本月：上班 '+work+' 天，加班 '+(+ot.toFixed(2))+' 小時 = '+(+(ot/6).toFixed(2))+' 天'}
+    $('attendanceSummary').textContent='本月：全天 '+work+'、半天 '+half+'（折算 '+(work+half*0.5)+' 天），加班 '+(+ot.toFixed(2))+' 小時 = '+(+(ot/6).toFixed(2))+' 天'}
 function renderAttendance(){
     var m=$('attendanceMonth').value||monthOf(today()),n=daysInMonth(m),table=$('attendanceGrid');
     refreshSelects();
@@ -1176,7 +1186,7 @@ function periodItems(){
       return x.id===old}
     )?old:'all';
     return periods}
-var COLS=[['姓名','name'],['上班天數','workDays'],['休假天數','leaveDays'],['公休天數','holidayDays'],['加班時數','otHours'],['加班折算天數','otDays'],['基本薪','base'],['加班費','otPay'],['津貼','allowance'],['獎金','bonus'],['其他加項','otherPlus'],['勞健保','insurance'],['預支','advance'],['其他扣項','otherMinus'],['實發金額','net']];
+var COLS=[['姓名','name'],['全天天數','fullDays'],['半天天數','halfDays'],['上班折算天數','workDays'],['休假天數','leaveDays'],['公休天數','holidayDays'],['加班時數','otHours'],['加班折算天數','otDays'],['基本薪','base'],['加班費','otPay'],['津貼','allowance'],['獎金','bonus'],['其他加項','otherPlus'],['勞健保','insurance'],['預支','advance'],['其他扣項','otherMinus'],['實發金額','net']];
   function reportData(){
     var m=$('reportMonth').value||monthOf(today()),parts=m.split('-').map(Number),periods=periodItems(),p=periods.find(function(x){
       return x.id===$('reportPeriod').value}
@@ -1242,7 +1252,7 @@ function renderReport(){
       var f=sr.figures;
       function kv(k,v,cls){return '<div class="kv'+(cls?' '+cls:'')+'"><span>'+k+'</span><b>'+v+'</b></div>'}
       return '<div class="report-card"><div class="report-card-head"><strong>'+esc(sr.name)+'</strong><button class="secondary small" data-live-slip="'+esc(sr.employeeId)+'">薪資單</button></div>'+
-        kv('上班／休假／公休',f.workDays+'／'+f.leaveDays+'／'+f.holidayDays+' 天')+
+        kv('全天／半天',(f.fullDays!=null?f.fullDays:f.workDays)+'／'+(f.halfDays||0)+' 天（折算 '+(+Number(f.workDays).toFixed(2))+' 天）')+kv('休假／公休',f.leaveDays+'／'+f.holidayDays+' 天')+
         kv('加班',(+f.otHours.toFixed(2))+' 小時（'+(+f.otDays.toFixed(2))+' 天）')+
         kv('基本薪',money(f.base))+kv('加班費',money(f.otPay))+
         kv('加項（津貼＋獎金＋其他）',money(f.allowance+f.bonus+f.otherPlus))+
@@ -1275,7 +1285,7 @@ function renderHome(){
     Object.keys(state.attendance).forEach(function(k){
       if(state.attendance[k].date===t){
         n++;
-        if(state.attendance[k].status==='上班')w++}
+        if(['全天','半天','上班'].indexOf(state.attendance[k].status)>=0)w++}
       }
     );
     $('homeStats').innerHTML='<div class="stat">員工人數<b>'+state.employees.length+'</b></div><div class="stat">今日已登記<b>'+n+'</b></div><div class="stat">今日上班<b>'+w+'</b></div>';
@@ -1291,7 +1301,7 @@ function renderHome(){
         maximumFractionDigits:2}
       )+'</td><td>'+money(calc.net)+'</td></tr>'}
     ).join('');
-    $('homeMonthTable').innerHTML=homeRows?'<div class="table-wrap"><table><thead><tr><th>員工</th><th>上班天數</th><th>加班時數</th><th>目前累計實發</th></tr></thead><tbody>'+homeRows+'</tbody></table></div>':'<div class="empty-state">尚無員工資料。</div>';
+    $('homeMonthTable').innerHTML=homeRows?'<div class="table-wrap"><table><thead><tr><th>員工</th><th>上班折算天數</th><th>加班時數</th><th>目前累計實發</th></tr></thead><tbody>'+homeRows+'</tbody></table></div>':'<div class="empty-state">尚無員工資料。</div>';
     }
 function csvCell(x){
     var s=String(x==null?'':x);
@@ -1363,7 +1373,7 @@ function csvCell(x){
     '.payslip-page .day-list{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px 6px;font-size:11.5px}',
     '.payslip-page .day-item{display:flex;flex-wrap:wrap;gap:2px 5px;align-items:baseline;border:1px solid #dce7e4;border-radius:5px;padding:2px 5px}',
     '.payslip-page .day-item .d{font-variant-numeric:tabular-nums;color:#4a5f5b}',
-    '.payslip-page .day-item .s-休假{color:#825710}.payslip-page .day-item .s-公休{color:#514987}',
+    '.payslip-page .day-item .s-半天{color:#176442;font-style:italic}.payslip-page .day-item .s-休假{color:#825710}.payslip-page .day-item .s-公休{color:#514987}',
     '.payslip-page .day-item .o{color:#16645d;font-weight:700}',
     '.payslip-page .day-item .n{flex-basis:100%;color:#4a5f5b;font-size:11px}',
     '@media (max-width:600px){.payslip-page .day-list{grid-template-columns:repeat(2,minmax(0,1fr))}}',
@@ -1377,10 +1387,17 @@ function csvCell(x){
     el.textContent = css;
   }
 
+  function upgradeSnaps(list) {
+    (list || []).forEach(function (h) {
+      (h.rows || []).forEach(function (r) { var f = r.figures || {}; if (f.fullDays == null) { f.fullDays = f.workDays || 0; f.halfDays = 0; } });
+      if (h.totals && h.totals.fullDays == null) { h.totals.fullDays = h.totals.workDays || 0; h.totals.halfDays = 0; }
+    });
+    return list;
+  }
   function loadHistory() {
     try {
       var h = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
-      history = Array.isArray(h) ? h : [];
+      history = upgradeSnaps(Array.isArray(h) ? h : []);
     } catch (e) { history = []; }
   }
   function saveHistory() {
@@ -1455,13 +1472,15 @@ function csvCell(x){
       '<div><span>產生日期</span><strong>' + esc(fmtTime(meta.createdAt)) + '</strong></div>' +
       '</div>' +
       '<h3>出勤摘要</h3><div class="slip-stats">' +
-      '<div><span>上班天數</span><b>' + f.workDays + ' 天</b></div>' +
+      '<div><span>全天天數</span><b>' + (f.fullDays != null ? f.fullDays : f.workDays) + ' 天</b></div>' +
+      '<div><span>半天天數</span><b>' + (f.halfDays || 0) + ' 天</b></div>' +
+      '<div><span>上班折算</span><b>' + fmtNum(f.workDays) + ' 天</b></div>' +
       '<div><span>休假天數</span><b>' + f.leaveDays + ' 天</b></div>' +
       '<div><span>公休天數</span><b>' + f.holidayDays + ' 天</b></div>' +
       '<div><span>加班時數</span><b>' + fmtNum(f.otHours) + ' 小時</b></div>' +
       '<div><span>加班折算</span><b>' + fmtNum(f.otDays) + ' 天</b></div></div>' +
       '<h3>應發項目</h3><table><tbody>' +
-      line('基本薪', '日薪 ' + money(row.dailyWage) + ' × ' + paidDays + ' 天' + (meta.settings && meta.settings.holidayPaid && f.holidayDays ? '（含公休支薪）' : ''), f.base) +
+      line('基本薪', '日薪 ' + money(row.dailyWage) + ' × ' + fmtNum(paidDays) + ' 天' + (f.halfDays ? '（全天 ' + f.fullDays + ' ＋ 半天 ' + f.halfDays + ' × 0.5）' : '') + (meta.settings && meta.settings.holidayPaid && f.holidayDays ? '（含公休支薪）' : ''), f.base) +
       line('加班費', '日薪 ' + money(row.dailyWage) + ' × ' + fmtNum(f.otHours) + ' 小時 ÷ 6（6 小時折 1 天，每天最多 9 小時）', f.otPay) +
       entryLines(PLUS_TYPES, false) +
       '<tr class="sum"><th colspan="2">應發合計</th><th class="amount">' + money(plusTotal) + '</th></tr></tbody></table>' +
@@ -1641,13 +1660,13 @@ function csvCell(x){
       Object.keys(rec).forEach(function (k) {
         var i = k.indexOf(':'), p = k.slice(0, i), id = decodeURIComponent(k.slice(i + 1)), v = rec[k];
         if (p === 'emp') st.employees.push(v);
-        else if (p === 'att') { if (v && typeof v === 'object' && 'otHours' in v) v.otHours = clampOT(v.otHours); st.attendance[id] = v; }
+        else if (p === 'att') { st.attendance[id] = normalizeRecord(v); }
         else if (p === 'ent') st.entries.push(v);
         else if (p === 'set') st.settings[id] = v && v.v;
         else if (p === 'slip') h.push(v);
       });
       h.sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
-      return { state: st, history: h };
+      return { state: st, history: upgradeSnaps(h) };
     }
     function diff(a, b) {
       var ops = [];
@@ -1960,7 +1979,7 @@ function csvCell(x){
       if(!emp){
         alert('請先新增並選擇員工。');
         return}
-      if(!confirm('只會將目前未填的平日設為上班，確定繼續？'))return;
+      if(!confirm('只會將目前未填的平日設為全天，確定繼續？'))return;
       for(var d=1;
       d<=daysInMonth(m);
       d++){
@@ -1968,7 +1987,7 @@ function csvCell(x){
         if(date.getDay()!==0&&date.getDay()!==6){
           var r=getRecord(emp,dt);
           if(!r.status){
-            r.status='上班';
+            r.status='全天';
             state.attendance[emp+'|'+dt]=r}
           }
         }
@@ -2065,7 +2084,7 @@ function csvCell(x){
             return !e.id||!e.employeeId||!MONEY_TYPES[e.type]||!Number.isFinite(Number(e.amount))||!/^\d{4}-\d{2}-\d{2}$/.test(e.date)}
           ))throw new Error('格式不符');
           if(!confirm(!document.body.classList.contains('local-mode')?'匯入會覆蓋雲端上所有員工、出勤、加扣項、設定與薪資單紀錄（老闆和會計的手機都會變成這份）。確定繼續？':'匯入會覆蓋目前所有員工、出勤、加扣項與設定。確定繼續？'))return;
-          history=Array.isArray(v.payslips)?v.payslips:history;localStorage.setItem(HISTORY_KEY,JSON.stringify(history));
+          history=upgradeSnaps(Array.isArray(v.payslips)?v.payslips:history);localStorage.setItem(HISTORY_KEY,JSON.stringify(history));
           state={
             employees:v.employees,attendance:normalizeAttendance(v.attendance),entries:v.entries,settings:Object.assign({
               holidayPaid:false}
